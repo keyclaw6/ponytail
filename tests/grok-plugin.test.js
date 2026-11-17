@@ -18,15 +18,19 @@ test('Grok manifest is a skill-only adapter with no lifecycle hooks', () => {
   assert.ok(!fs.existsSync(path.join(root, '.grok-plugin', 'hooks.json')));
 });
 
-// Fork: every skill is kept from the model and runs only when the user names it,
-// so ponytail stays off until /ponytail (upstream lets the model auto-invoke it).
-test('every skill runs only when the user invokes it, in every host', () => {
+// Fork: every skill except the review is kept from the model and runs only when
+// the user names it, so ponytail stays off until /ponytail (upstream lets the
+// model auto-invoke it). The review is the agents' code review skill, so the
+// model may use it.
+test('only the review is offered to the model, in every host', () => {
   for (const id of fs.readdirSync(path.join(root, 'skills'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {
     const dir = path.join(root, 'skills', id);
-    assert.match(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'), /^disable-model-invocation: true$/m, id);
+    const hidden = id !== 'ponytail-review';
+    const skill = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8');
+    assert.equal(/^disable-model-invocation: true$/m.test(skill), hidden, id);
     assert.match(fs.readFileSync(path.join(dir, 'agents', 'openai.yaml'), 'utf8'),
-      /^policy:\n {2}allow_implicit_invocation: false$/m, id);
+      new RegExp(`^policy:\\n {2}allow_implicit_invocation: ${!hidden}$`, 'm'), id);
   }
 });
 

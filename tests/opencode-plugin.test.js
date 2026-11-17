@@ -192,9 +192,11 @@ test('V2 a level set in one session never reaches another, and a new session sta
   }
 });
 
-test('V2 skills stay out of the model\'s listing; the commands still run them', async () => {
+test('V2 skills stay out of the model\'s listing, except the review; the commands still run them', async () => {
   const { added } = await setupV2();
-  for (const skill of added.skills) assert.equal(skill.autoinvoke, false, skill.id);
+  for (const skill of added.skills) {
+    assert.equal(skill.autoinvoke, skill.id === 'ponytail-review' ? undefined : false, skill.id);
+  }
   assert.ok(added.commands.ponytail, '/ponytail is still registered');
 });
 

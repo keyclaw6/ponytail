@@ -8,13 +8,18 @@ license: MIT
 Review a change like the senior developer who will be paged when it breaks.
 Order of importance: correct, safe, holds under load, tested, fast, lean.
 Lean still matters: every extra line must be read, tested and fixed later.
+Aim for the real defects, not a long list: one true finding beats five niche
+or false ones.
 This is a report the user asked for, so give it in full.
 
 ## 1. Understand first
 
 - Review what the user names: uncommitted or staged changes, a branch, a PR
   link, or files. Nothing named: the uncommitted changes, or the last commit
-  if there are none.
+  if there are none. For a branch or PR, review what would merge: the diff
+  from `git merge-base HEAD <base>`, not from the tip of the base.
+- Read the project's instruction files (AGENTS.md, CLAUDE.md). A change that
+  breaks a rule they state is a finding.
 - Read the diff, then the code it touches: callers of every changed function,
   the functions it calls, the tests, the README.
 - Trace the real flow: where data comes in, what is stored, what goes out.
@@ -22,7 +27,9 @@ This is a report the user asked for, so give it in full.
   or behavior changes, grep every caller.
 - Find the expected load in the repo (README, deploy config): one person
   running a script, or many users and processes at once. Judge scale against
-  that, and say which load you assumed.
+  that, and say which load you assumed. The load decides scale findings only:
+  a script one person runs can still give a wrong result, lose data or skip
+  a check.
 
 ## 2. Look for
 
@@ -53,15 +60,23 @@ This is a report the user asked for, so give it in full.
 
 ## 3. Check before you report
 
-- Every finding needs a concrete case: "this input or situation leads to this
-  wrong result". No case, no finding.
-- Re-read the lines and confirm: the caller exists, the value can really be
-  empty, the code really is unused.
+- Report only what this change brings in or breaks. Not findings: problems
+  that were there before, behavior the author changed on purpose, style taste,
+  "consider", vague worries.
+- Every finding needs a concrete case you can show from the code: "this input
+  or situation, through these lines, leads to this wrong result". No case, no
+  finding.
+- Confirm each finding against the tests and the call sites: the caller
+  exists, the value can really be empty, the code really is unused, nothing
+  else already guards it.
+- Report it only if the author would fix it once they knew.
+- Go through the whole change, also after the first finding: error paths, a
+  second run, and other inputs or state the code accepts.
 - A shortcut marked with a `shortcut:` (or older `ponytail:`) comment that names its limit is a
   decision, not a finding, unless the expected load already crosses it.
 - Propose the smallest fix that works. Prefer fixes that delete code. Never
   add layers, frameworks or config the problem does not need.
-- No style taste, no "consider", no vague worries.
+- Never invent a finding to fill the report. Finding nothing is a fine result.
 
 ## 4. Output
 
@@ -95,4 +110,4 @@ End with:
 Nothing found: `What this change does:`, then `Looks good. Ship.` and one line
 on what you checked.
 
-Lists findings, changes no code.
+Lists findings; changes no code, commits nothing, posts nothing.
