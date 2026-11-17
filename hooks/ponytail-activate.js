@@ -178,19 +178,45 @@ function activate(mode) {
 let input = '';
 let done = false;
 
+// A Claude Code subagent compacts with its parent's session id and its own
+// agent_id. A level its prompt carried (ponytail-delegate.js puts the ruleset at
+// the start of that prompt) is the subagent's alone, so it is read back from the
+// start of the subagent's transcript rather than kept in the parent's state.
+// Claude Code 2.1 keeps that transcript at <session>/subagents/agent-<id>.jsonl
+// beside the parent's; anywhere else it is simply not found.
+function subagentLevel(data) {
+  let fd;
+  try {
+    const file = path.join(path.dirname(data.transcript_path), data.session_id,
+      'subagents', 'agent-' + data.agent_id + '.jsonl');
+    fd = fs.openSync(file, 'r');
+    const head = Buffer.alloc(4096);
+    const firstLine = head.toString('utf8', 0, fs.readSync(fd, head, 0, head.length, 0)).split('\n', 1)[0];
+    const match = firstLine.match(/"(?:content|text)":"PONYTAIL MODE ACTIVE — level: (lite|full|ultra)\\n/);
+    return match && match[1];
+  } catch (e) {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 function finish() {
   if (done) return;
   done = true;
-  let source = '';
-  let sessionId = '';
+  let data = {};
   try {
     // Strip UTF-8 BOM some shells prepend when piping (breaks JSON.parse)
-    const data = JSON.parse(input.replace(/^\uFEFF/, ''));
-    source = data.source;
-    sessionId = data.session_id;
-    bindSession(sessionId);
+    data = JSON.parse(input.replace(/^\uFEFF/, '')) || {};
+    bindSession(data.session_id);
   } catch (e) {
     // No payload, or an unparseable one: treat it as a fresh session
+  }
+  const { source, session_id: sessionId } = data;
+  const carried = source === 'compact' && data.agent_id && !readMode() && subagentLevel(data);
+  if (carried) {
+    try { writeHookOutput('SessionStart', carried, getPonytailInstructions(carried)); } catch (e) { /* EPIPE */ }
+    return;
   }
   // Resuming continues a conversation too (T3 Code resumes its threads after a
   // restart). Only a session id says whose level it is.

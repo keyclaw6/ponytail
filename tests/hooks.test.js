@@ -1016,6 +1016,21 @@ for (const [label, extra] of [
     assert.equal(delegate('Agent', { prompt }).stdout, '', `left alone: ${JSON.stringify(prompt)}`);
   }
   assert.equal(run('ponytail-delegate.js', env, 'not json').stdout, '', 'an unreadable payload is left alone');
+  assert.match(JSON.parse(delegate('Agent', { prompt: '/ponytail full\n\n    indented()\n    more()' }).stdout)
+    .hookSpecificOutput.updatedInput.prompt, /\n---\n\n    indented\(\)\n    more\(\)$/, 'the task keeps its indentation');
+
+  // A Claude Code subagent that got its level this way keeps it when it compacts
+  // (parent session id plus agent_id); the parent stays off.
+  const project = path.join(temp, 'sub-project');
+  const transcript = path.join(project, 'P.jsonl');
+  fs.mkdirSync(path.join(project, 'P', 'subagents'), { recursive: true });
+  fs.writeFileSync(path.join(project, 'P', 'subagents', 'agent-a1.jsonl'), JSON.stringify({ message: { role: 'user',
+    content: JSON.parse(delegate('Agent', { prompt: '/ponytail lite\nTask' }).stdout).hookSpecificOutput.updatedInput.prompt } }) + '\n');
+  const compact = (agent_id) => run('ponytail-activate.js', env,
+    JSON.stringify({ session_id: 'P', transcript_path: transcript, source: 'compact', agent_id })).stdout;
+  assert.match(compact('a1'), /level: lite/, 'the subagent gets its level back');
+  assert.equal(compact('a2'), '', 'another subagent of the same parent does not');
+  assert.equal(compact(undefined), '', 'nor does the parent');
 }
 
 console.log('hook compatibility checks passed');

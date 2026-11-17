@@ -46,6 +46,17 @@ function readMode(sessionID) {
   }
 }
 
+// The level a subagent's prompt carried (the execute.before hook below puts the
+// ruleset at its start; OpenCode may put one line of its own before it).
+const CARRIED = /^(?:[^\n]*\n)?PONYTAIL MODE ACTIVE — level: (lite|full|ultra)\n/;
+
+function carriedLevel(messages) {
+  const first = (messages || []).find((message) => message.role === 'user');
+  const part = first && (first.content || []).find((p) => p.type === 'text');
+  const match = part && String(part.text).match(CARRIED);
+  return match && match[1];
+}
+
 function writeMode(mode, sessionID) {
   const file = statePath(sessionID);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -153,10 +164,16 @@ export default {
     });
 
     // Append the ruleset to the system prompt every turn. V2 hands over owned
-    // system parts, so push one instead of rewriting the tail of another.
+    // system parts, so push one instead of rewriting the tail of another. A
+    // subagent's carried level is stored for its session on its first turn, so
+    // the ruleset comes back once compaction drops the prompt that carried it.
     await ctx.session.hook('context', (event) => {
+      const carried = carriedLevel(event.messages);
+      if (carried && event.sessionID && !fs.existsSync(statePath(event.sessionID))) {
+        writeMode(carried, event.sessionID);
+      }
       const mode = readMode(event.sessionID);
-      if (mode === 'off') return;
+      if (mode === 'off' || mode === carried) return;
       event.system.push({ type: 'text', text: getPonytailInstructions(mode) });
     });
   },

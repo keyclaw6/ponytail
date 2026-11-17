@@ -143,6 +143,19 @@ test('V2 a subagent prompt that starts with /ponytail <level> gets that ruleset;
   }
 });
 
+test('V2 a subagent keeps the level its prompt carried once compaction drops that prompt', async () => {
+  const sub = path.join(tmp, 'opencode', 'ponytail-sessions', 'child');
+  const { hooks } = await setupV2();
+  const first = { sessionID: 'child', system: [], messages: [
+    { role: 'user', content: [{ type: 'text', text: 'You are a subagent spawned by another session.\nPONYTAIL MODE ACTIVE — level: ultra\n\n# Ponytail' }] }] };
+  await hooks.context(first);
+  assert.equal(fs.readFileSync(sub, 'utf8'), 'ultra', 'stored for the subagent session');
+  assert.deepEqual(first.system, [], 'no second copy while the prompt carries it');
+  const compacted = { sessionID: 'child', system: [], messages: [{ role: 'user', content: [{ type: 'text', text: 'Summary.' }] }] };
+  await hooks.context(compacted);
+  assert.match(compacted.system[0].text, /level: ultra/);
+});
+
 test('V2 context hook injects the ruleset, and stays silent when off', async () => {
   try { fs.unlinkSync(statePath); } catch (e) {}
   let { hooks } = await setupV2();

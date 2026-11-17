@@ -103,7 +103,8 @@ function getSubagentPrompt(prompt) {
   if (!match) return null;
   // A bare /ponytail switches on at the default level, as in a session.
   const mode = match[1] ? match[1].toLowerCase() : (getDefaultMode() === 'off' ? 'full' : getDefaultMode());
-  return getPonytailInstructions(mode) + '\n\n---\n\n' + prompt.slice(match[0].length).replace(/^\s+/, '');
+  // Only blank lines after the command go: the task's own indentation stays.
+  return getPonytailInstructions(mode) + '\n\n---\n\n' + prompt.slice(match[0].length).replace(/^(?:[ \t]*\r?\n)+/, '');
 }
 
 module.exports = {
