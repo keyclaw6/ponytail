@@ -18,11 +18,16 @@ test('Grok manifest is a skill-only adapter with no lifecycle hooks', () => {
   assert.ok(!fs.existsSync(path.join(root, '.grok-plugin', 'hooks.json')));
 });
 
-test('Ponytail skill describes every coding task for Grok auto-invocation', () => {
-  const skill = fs.readFileSync(path.join(root, 'skills', 'ponytail', 'SKILL.md'), 'utf8');
-  assert.match(skill, /Use on any\s+coding task/i);
-  assert.match(skill, /writing,\s+fixing, refactoring, reviewing/i);
-  assert.doesNotMatch(skill, /disable-model-invocation:\s*true/i);
+// Fork: every skill is kept from the model and runs only when the user names it,
+// so ponytail stays off until /ponytail (upstream lets the model auto-invoke it).
+test('every skill runs only when the user invokes it, in every host', () => {
+  for (const id of fs.readdirSync(path.join(root, 'skills'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {
+    const dir = path.join(root, 'skills', id);
+    assert.match(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'), /^disable-model-invocation: true$/m, id);
+    assert.match(fs.readFileSync(path.join(dir, 'agents', 'openai.yaml'), 'utf8'),
+      /^policy:\n {2}allow_implicit_invocation: false$/m, id);
+  }
 });
 
 test('Grok marketplace resolves a subdirectory with the same skills as direct installation', () => {

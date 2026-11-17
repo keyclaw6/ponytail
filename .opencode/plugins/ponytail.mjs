@@ -96,6 +96,8 @@ function readSkills() {
           id: entry.name,
           name: parsed.name || entry.name,
           description: parsed.description,
+          // Kept out of the model's skill listing; the /ponytail commands still run it.
+          ...(parsed.disableModelInvocation ? { autoinvoke: false } : {}),
           path: file,
           content: parsed.body,
         };

@@ -192,6 +192,12 @@ test('V2 a level set in one session never reaches another, and a new session sta
   }
 });
 
+test('V2 skills stay out of the model\'s listing; the commands still run them', async () => {
+  const { added } = await setupV2();
+  for (const skill of added.skills) assert.equal(skill.autoinvoke, false, skill.id);
+  assert.ok(added.commands.ponytail, '/ponytail is still registered');
+});
+
 // ---------------------------------------------------------------- V1 ------
 
 function transform(hooks) {
@@ -274,6 +280,7 @@ test('parseSkillFile folds >, keeps | lines, and stops at the next key', () => {
   assert.deepEqual(parseSkillFile(file), {
     name: 'demo',
     description: 'one two three four\n',
+    disableModelInvocation: false,
     body: 'BODY\n',
   });
 
@@ -288,7 +295,11 @@ test('parseSkillFile folds >, keeps | lines, and stops at the next key', () => {
 
   // CRLF: a Windows checkout must parse the same as the npm \n build.
   fs.writeFileSync(file, '---\r\nname: demo\r\ndescription: >\r\n  crlf text\r\n---\r\nBODY\r\n');
-  assert.deepEqual(parseSkillFile(file), { name: 'demo', description: 'crlf text\n', body: 'BODY\r\n' });
+  assert.deepEqual(parseSkillFile(file), {
+    name: 'demo', description: 'crlf text\n', disableModelInvocation: false, body: 'BODY\r\n',
+  });
+  fs.writeFileSync(file, '---\r\nname: demo\r\ndisable-model-invocation: true\r\n---\r\nB\r\n');
+  assert.equal(parseSkillFile(file).disableModelInvocation, true, 'CRLF flag line');
 
   fs.writeFileSync(file, 'no frontmatter here\n');
   assert.equal(parseSkillFile(file), null);

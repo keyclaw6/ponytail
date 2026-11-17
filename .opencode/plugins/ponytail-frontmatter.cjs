@@ -56,6 +56,7 @@ function parseSkillFile(filePath) {
   return {
     name: frontmatterField(match[1], 'name'),
     description: frontmatterField(match[1], 'description'),
+    disableModelInvocation: frontmatterField(match[1], 'disable-model-invocation') === 'true',
     body: match[2],
   };
 }
