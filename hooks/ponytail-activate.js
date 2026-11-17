@@ -12,6 +12,7 @@ const path = require('path');
 const { getDefaultMode, getClaudeDir, isShellSafe } = require('./ponytail-config');
 const { getPonytailInstructions } = require('./ponytail-instructions');
 const {
+  bindSession,
   clearMode,
   cursorRuleNotice,
   cursorRulePath,
@@ -182,7 +183,9 @@ function finish() {
   let source = '';
   try {
     // Strip UTF-8 BOM some shells prepend when piping (breaks JSON.parse)
-    source = JSON.parse(input.replace(/^\uFEFF/, '')).source;
+    const data = JSON.parse(input.replace(/^\uFEFF/, ''));
+    source = data.source;
+    bindSession(data.session_id);
   } catch (e) {
     // No payload, or an unparseable one: treat it as a fresh session
   }
