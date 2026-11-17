@@ -975,4 +975,47 @@ for (const [label, extra] of [
     `${label}: the first session keeps its level across compaction`);
 }
 
+// A resumed session keeps its own level (T3 Code resumes threads after a
+// restart), so a later compaction or subagent still has it; a fresh one starts
+// at the default.
+{
+  const resumeHome = path.join(temp, 'resume-home');
+  fs.mkdirSync(resumeHome, { recursive: true });
+  const env = { HOME: resumeHome, USERPROFILE: resumeHome, PONYTAIL_DEFAULT_MODE: 'off' };
+  const hook = (script, session, payload) =>
+    run(script, env, JSON.stringify({ session_id: session, ...payload })).stdout;
+
+  hook('ponytail-mode-tracker.js', 'R', { prompt: '/ponytail lite' });
+  assert.match(hook('ponytail-activate.js', 'R', { source: 'resume' }), /level: lite/, 'resume keeps the level');
+  assert.match(hook('ponytail-activate.js', 'R', { source: 'compact' }), /level: lite/, 'and so does a later compaction');
+  assert.equal(hook('ponytail-activate.js', 'S', { source: 'resume' }), '', 'a resumed session that never had it stays off');
+}
+
+// A subagent prompt that starts with /ponytail <level> gets that level's ruleset
+// in place of the line (Claude Code's Agent tool, Codex's spawn_agent); any
+// other prompt is left alone.
+{
+  const env = { HOME: home, USERPROFILE: home, PONYTAIL_DEFAULT_MODE: 'off' };
+  const delegate = (tool_name, tool_input) => run('ponytail-delegate.js', env, JSON.stringify({ tool_name, tool_input }));
+
+  for (const [label, tool, field, line] of [
+    ['Claude Agent', 'Agent', 'prompt', '/ponytail ultra'],
+    ['Codex spawn_agent', 'spawn_agent', 'message', '$ponytail:ponytail ultra'],
+  ]) {
+    const result = delegate(tool, { description: 'd', [field]: line + '\n\nFix the bug.' });
+    assert.equal(result.status, 0, result.stderr);
+    const out = JSON.parse(result.stdout).hookSpecificOutput;
+    assert.equal(out.permissionDecision, 'allow', `${label}: updatedInput needs allow`);
+    assert.equal(out.updatedInput.description, 'd', `${label}: other fields are kept`);
+    assert.match(out.updatedInput[field], /^PONYTAIL MODE ACTIVE — level: ultra\n/, `${label}: the ruleset comes first`);
+    assert.match(out.updatedInput[field], /\n---\n\nFix the bug\.$/, `${label}: the task follows, without the line`);
+  }
+  assert.match(JSON.parse(delegate('Agent', { prompt: '/ponytail\nTask' }).stdout).hookSpecificOutput.updatedInput.prompt,
+    /level: full/, 'a bare /ponytail switches on at full when the default is off');
+  for (const prompt of ['Fix the bug.', 'Fix the bug.\n/ponytail ultra', '/ponytail-review the diff', '/ponytail off\nTask']) {
+    assert.equal(delegate('Agent', { prompt }).stdout, '', `left alone: ${JSON.stringify(prompt)}`);
+  }
+  assert.equal(run('ponytail-delegate.js', env, 'not json').stdout, '', 'an unreadable payload is left alone');
+}
+
 console.log('hook compatibility checks passed');

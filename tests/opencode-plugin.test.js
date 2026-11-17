@@ -77,6 +77,7 @@ function setupV2(overrides = {}) {
       prompt: async (input) => prompts.push(input),
       hook: async (name, cb) => (hooks[name] = cb),
     },
+    tool: { hook: async (name, cb) => (hooks['tool.' + name] = cb) },
     ...overrides,
   };
   return loadPlugin.setup(ctx).then(() => ({ added, prompts, hooks }));
@@ -117,6 +118,29 @@ test('V2 /ponytail ultra persists the level and sends the template with the args
   assert.equal(prompts[0].delivery, 'steer');
   assert.match(prompts[0].text, /^Switch to ponytail ultra mode\./);
   assert.ok(!prompts[0].text.includes('$ARGUMENTS'), 'template placeholder substituted');
+});
+
+test('V2 /ponytail full with a task after it: the level is the first word, the task follows the template', async () => {
+  try { fs.unlinkSync(statePath); } catch (e) {}
+  const { added, prompts } = await setupV2();
+  await added.commands.ponytail.execute({ sessionID: 's', prompt: { text: 'full\n\nFix the bug.' }, delivery: 'steer' });
+  assert.equal(fs.readFileSync(statePath, 'utf8'), 'full');
+  assert.match(prompts[0].text, /^Switch to ponytail full mode\./);
+  assert.match(prompts[0].text, /\n\nFix the bug\.$/);
+});
+
+test('V2 a subagent prompt that starts with /ponytail <level> gets that ruleset; other tools and prompts are untouched', async () => {
+  const { hooks } = await setupV2();
+  const event = { tool: 'subagent', input: { agent: 'general', prompt: '/ponytail ultra\nFix the bug.' } };
+  hooks['tool.execute.before'](event);
+  assert.equal(event.input.agent, 'general');
+  assert.match(event.input.prompt, /^PONYTAIL MODE ACTIVE — level: ultra\n/);
+  assert.match(event.input.prompt, /\n---\n\nFix the bug\.$/);
+  for (const other of [{ tool: 'subagent', input: { prompt: 'Fix the bug.' } }, { tool: 'bash', input: { prompt: '/ponytail ultra' } }]) {
+    const before = JSON.stringify(other);
+    hooks['tool.execute.before'](other);
+    assert.equal(JSON.stringify(other), before);
+  }
 });
 
 test('V2 context hook injects the ruleset, and stays silent when off', async () => {

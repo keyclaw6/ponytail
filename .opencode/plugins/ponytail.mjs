@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The shared instruction builder is CommonJS; bridge to it from this ES module.
 const require = createRequire(import.meta.url);
-const { getPonytailInstructions } = require('../../hooks/ponytail-instructions');
+const { getPonytailInstructions, getSubagentPrompt } = require('../../hooks/ponytail-instructions');
 const { getDefaultMode, normalizePersistedMode } = require('../../hooks/ponytail-config');
 const { parseCommandFile, parseSkillFile } = require('./ponytail-frontmatter.cjs');
 
@@ -57,7 +57,9 @@ function writeMode(mode, sessionID) {
 // the next turn's injection, not the current one — good enough; switch to a
 // synchronous store if same-turn switching ever matters.
 function persistMode(args, sessionID) {
-  const wanted = String(args == null ? '' : args).trim();
+  // The level is the first word: T3 Code sends "/ponytail full" and the task
+  // after it as one command, so the arguments can carry the whole task.
+  const wanted = String(args == null ? '' : args).trim().split(/\s+/)[0];
   // Bare /ponytail switches ponytail on, or keeps the level when it already is (#639).
   if (!wanted && readMode(sessionID) !== 'off') return;
   const mode = wanted ? normalizePersistedMode(wanted) : (getDefaultMode() === 'off' ? 'full' : getDefaultMode());
@@ -125,16 +127,29 @@ export default {
           name: command.name,
           description: command.description,
           execute: async ({ sessionID, prompt, delivery }) => {
-            if (command.name === 'ponytail') persistMode(prompt.text, sessionID);
+            let args = prompt.text || '';
+            let task = '';
+            if (command.name === 'ponytail') {
+              persistMode(args, sessionID);
+              // "/ponytail full" with a task after it: the task follows the switch.
+              [, args, task] = args.trim().match(/^(\S*)\s*([\s\S]*)$/);
+            }
             await ctx.session.prompt({
               ...prompt,
               sessionID,
-              text: command.template.replaceAll('$ARGUMENTS', prompt.text || ''),
+              text: command.template.replaceAll('$ARGUMENTS', args) + (task ? '\n\n' + task : ''),
               delivery,
             });
           },
         });
       }
+    });
+
+    // A subagent prompt that starts with /ponytail <level> carries that level's
+    // ruleset: the subagent is a session of its own and starts off.
+    await ctx.tool?.hook?.('execute.before', (event) => {
+      const prompt = event.tool === 'subagent' && getSubagentPrompt(event.input && event.input.prompt);
+      if (prompt) event.input = { ...event.input, prompt };
     });
 
     // Append the ruleset to the system prompt every turn. V2 hands over owned

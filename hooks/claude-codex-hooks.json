@@ -36,6 +36,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Agent|Task|.*spawn_agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"require(require('node:path').join(process.env.CLAUDE_PLUGIN_ROOT.replaceAll(String.fromCharCode(92), '/'), 'hooks/ponytail-delegate.js'))\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

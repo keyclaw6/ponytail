@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { DEFAULT_MODE, normalizeMode, normalizePersistedMode } = require('./ponytail-config');
+const { DEFAULT_MODE, getDefaultMode, normalizeMode, normalizePersistedMode } = require('./ponytail-config');
 
 const INDEPENDENT_MODES = new Set(['review']);
 const SKILL_PATH = path.join(__dirname, '..', 'skills', 'ponytail', 'SKILL.md');
@@ -91,8 +91,24 @@ function getPonytailInstructions(mode) {
   }
 }
 
+// An agent cannot type /ponytail into its own session, and a subagent's prompt
+// reaches no prompt hook, so an agent switches ponytail on in a subagent by
+// starting the subagent's prompt with "/ponytail lite|full|ultra". This returns
+// that prompt with the line swapped for the level's ruleset, or null for any
+// other prompt.
+const SUBAGENT_LINE = /^\s*[/$@]ponytail(?::ponytail)?(?:[ \t]+(lite|full|ultra))?[ \t]*(?:\r?\n|$)/i;
+
+function getSubagentPrompt(prompt) {
+  const match = typeof prompt === 'string' && prompt.match(SUBAGENT_LINE);
+  if (!match) return null;
+  // A bare /ponytail switches on at the default level, as in a session.
+  const mode = match[1] ? match[1].toLowerCase() : (getDefaultMode() === 'off' ? 'full' : getDefaultMode());
+  return getPonytailInstructions(mode) + '\n\n---\n\n' + prompt.slice(match[0].length).replace(/^\s+/, '');
+}
+
 module.exports = {
   filterSkillBodyForMode,
   getFallbackInstructions,
   getPonytailInstructions,
+  getSubagentPrompt,
 };

@@ -170,10 +170,11 @@ function activate(mode) {
   }
 }
 
-// Compaction re-runs SessionStart inside the same conversation, so it keeps the
-// live level (or stays off after "stop ponytail") instead of resetting to the
-// default. Claude Code and Codex pass the trigger as `source` on stdin; reading
-// it there keeps the hook entry, and the trust Codex gave it, unchanged.
+// Compaction and resume re-run SessionStart inside the same conversation, so
+// they keep the live level (compaction also stays off after "stop ponytail")
+// instead of resetting to the default. Claude Code and Codex pass the trigger as
+// `source` on stdin; reading it there keeps the hook entry, and the trust Codex
+// gave it, unchanged.
 let input = '';
 let done = false;
 
@@ -181,15 +182,21 @@ function finish() {
   if (done) return;
   done = true;
   let source = '';
+  let sessionId = '';
   try {
     // Strip UTF-8 BOM some shells prepend when piping (breaks JSON.parse)
     const data = JSON.parse(input.replace(/^\uFEFF/, ''));
     source = data.source;
-    bindSession(data.session_id);
+    sessionId = data.session_id;
+    bindSession(sessionId);
   } catch (e) {
     // No payload, or an unparseable one: treat it as a fresh session
   }
-  activate(source === 'compact' ? (readMode() || 'off') : getDefaultMode());
+  // Resuming continues a conversation too (T3 Code resumes its threads after a
+  // restart). Only a session id says whose level it is.
+  if (source === 'compact') activate(readMode() || 'off');
+  else if (source === 'resume' && sessionId) activate(readMode() || getDefaultMode());
+  else activate(getDefaultMode());
 }
 
 process.stdin.on('data', chunk => { input += chunk; });
